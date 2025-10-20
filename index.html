@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arkaid Rescue!</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+          margin: 0;
+          padding: 0;
+          display: flex;
+          justify-content: center;
+          height: 100vh;
+          background:linear-gradient(to bottom, #87CEEB 0%, #98FB98 100%);
+          font-family: 'Segoe UI', Tahoma, Verdana, Geneva, sans-serif; 
+          overflow: hidden; 
+        }
+
+        canvas {
+            border: 3px solid #228B22;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            background: linear-gradient(to bottom, #87CEEB 70%, #90EE90 70%);
+        }
+
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 20px;
+            color: #228B22;
+            font-weight: bold;
+            z-index: 10;
+        }
+
+        #highScore {
+            text-align: right;
+        }
+
+        .instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            height: 130px;
+            transform: translateX(-50%);
+            text-align: center;
+            color: #225c22;
+            font-size: 14px;
+            max-width: 400px;
+        }
+
+        #startScreen, #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            z-index: 20;
+        }
+
+        #startScreen h1, #gameOverScreen h1 {
+            margin: 0 0 20px;
+            color: #FFD700;
+        }
+
+        button {
+            background: #228B22;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 18px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #32CD32;
+        }
+
+        #pauseBtn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #FF4500;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 15;
+        }
+
+        #pauseBtn:hover {
+            background: #FF6347;
+        }
+
+        footer {
+            position: absolute;
+            bottom: 0px;
+            width: 100%;
+            background-color: #000000;
+            padding: 10px 0;
+            color: #228B22;
+            text-align: center;
+            font-size: 12px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      <div id="score">Score: 0</div>
+      <div id="lives">Lives: 3</div>
+      <div id="highScore">High Score: 0</div>
+    </div>
+    <button id="pauseBtn" onclick="togglePause()">Pause</button>
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+    <div id="instructions" class="instructions">
+        Use A/D or Arrow Keys to move the basket and save falling animals!<br>
+        Avoid the poachers (red squares). Reach 100 points to win! Collect hearts for extra lives.
+    </div>
+
+    <div id="startScreen">
+        <h1>🦁 Arkaid Rescue! 🐾</h1>
+        <p><strong>Save the animals from the poachers! Move the basket to catch them.</strong></p>
+        <button onclick="startGame()">Start Game</button>
+    </div>
+
+    <div id="gameOverScreen" class="hidden">
+        <h1 id="gameOverTitle">Game Over</h1>
+        <p id="gameOverMessage">Animals Lost...</p>
+        <button onclick="restartGame()">Play Again</button>
+        <button onclick="window.location.href='#'">Main Menu</button>
+    </div>
+
+    <footer>
+        &copy; 2025 Arkaid Rescue! All rights reserved. Developed by Tavaris Freeman.
+    </footer>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const livesElement = document.getElementById('lives');
+        const highScoreElement = document.getElementById('highScore');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const gameOverTitle = document.getElementById('gameOverTitle');
+        const gameOverMessage = document.getElementById('gameOverMessage');
+        let score = 0;
+        let highScore = localStorage.getItem('arkaidHighScore') || 0;
+        highScoreElement.textContent = 'High Score: ' + highScore;
+        let lives = 3;
+        let gameOver = false;
+        let win = false;
+        let paused = false;
+        let gameStarted = false;
+        const player = {
+            x: canvas.width / 2 - 25,
+            y: canvas.height - 50,
+            width: 50,
+            height: 30,
+            speed: 6
+        };
+        let animals = [];
+        let poachers = [];
+        let powerUps = [];
+        let particles = [];
+        const animalsTypes = [
+            { emoji: '🐶', color: '#8B4513' },
+            { emoji: '🐱', color: '#A0522D' },
+            { emoji: '🐰', color: '#F4A460' },
+            { emoji: '🦊', color: '#FF4500' },
+            { emoji: '🐻', color: '#D2B48C' },
+            { emoji: '🐼', color: '#000000' },
+            { emoji: '🦉', color: '#8B4513' },
+            { emoji: '🐸', color: '#228B22' }
+        ];
+        const powerUpTypes = [
+            { emoji: '❤️', color: '#FF69B4' }
+        ];
+        const keys = {};
+        document.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.key.toLowerCase() === 'p') {
+                e.preventDefault();
+                togglePause();
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        function createAnimal() {
+            const animal = {
+                x: Math.random() * (canvas.width - 20),
+                y: -20,
+                width: 20,
+                height: 20,
+                type: animalsTypes[Math.floor(Math.random() * animalsTypes.length)],
+                speed: 2 + Math.random() * 3,
+                rotation: 0
+            };
+            animals.push(animal);
+        }
+
+        function createPoacher() {  
+            const poacher = {
+                x: Math.random() * (canvas.width - 30),
+                y: -30,
+                width: 30,
+                height: 30,
+                speed: 3 + Math.random() * 2,
+                rotation: 0
+            };
+            poachers.push(poacher);
+        }
+
+        function createPowerUp() {
+            const powerUp = {
+                x: Math.random() * (canvas.width - 20),
+                y: -20,
+                width: 20,
+                height: 20,
+                type: powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)],
+                speed: 2
+            };
+            powerUps.push(powerUp);
+        }
+
+        function updatePlayer() {
+            if(paused || !gameStarted) return;
+            if(keys['a'] || keys['arrowleft']) {
+                player.x -= player.speed;
+            }
+            if(keys['d'] || keys['arrowright']) {
+                player.x += player.speed;
+            }
+            player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+        }
+
+        function updateObjects() {
+            if(paused || !gameStarted) return;
+            for(let i = animals.length - 1; i >= 0; i--) {
+                const animal = animals[i];
+                animal.y += animal.speed;
+                animal.rotation += 0.1;
+                if(collides(animal, player)) {
+                    score += 10;
+                    if (animal.type && animal.type.color) {
+                        createParticles(animal.x + 10, animal.y + 10, animal.type.color);
+                    }
+                    animals.splice(i, 1);
+                    updateUI();
+                    checkWin();
+                    continue;
+                }
+                if(animal.y > canvas.height) {
+                    animals.splice(i, 1);
+                }
+            }
+            for(let i = poachers.length - 1; i >= 0; i--) {
+                const poacher = poachers[i];
+                poacher.y += poacher.speed;
+                poacher.rotation += 0.05;
+                if(collides(poacher, player)) {
+                    lives--;
+                    createParticles(poacher.x + 15, poacher.y + 15, '#FF0000');
+                    poachers.splice(i, 1);
+                    updateUI();
+                    checkGameOver();
+                    continue;      
+                }
+                if (poacher.y > canvas.height) {
+                    poachers.splice(i, 1);
+                }
+            }
+            for(let i = powerUps.length - 1; i >= 0; i--) {
+                const powerUp = powerUps[i];
+                powerUp.y += powerUp.speed;
+                if(collides(powerUp, player)) {
+                    lives = Math.min(3, lives + 1);
+                    powerUps.splice(i, 1);
+                    updateUI();
+                    continue;
+                }
+                if(powerUp.y > canvas.height) {
+                    powerUps.splice(i, 1);
+                }
+            }
+        }
+
+        function collides(a, b) {
+            return a.y + a.height > b.y &&
+            a.y < b.y + b.height &&
+            a.x + a.width > b.x &&
+            a.x < b.x + b.width;
+        }
+
+        function createParticles(x, y, color) {
+            for(let i = 0; i < 5; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 30,
+                    color: color
+                });
+            }
+        }  
+
+        function updateParticles() {
+            for(let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                p.vy += 0.2;
+                if(p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+        
+        function updateUI() {
+            scoreElement.textContent = 'Score: ' + score;
+            livesElement.textContent = 'Lives: ' + lives;
+            if(score > highScore) {
+                highScore = score;
+                highScoreElement.textContent = 'High Score: ' + highScore;
+                localStorage.setItem('arkaidHighScore', highScore);
+            }
+        }
+
+        function checkWin() {
+            if(score >= 100) {
+                win = true;
+                gameOver = true;
+                endGame();
+            }
+        }
+
+        function checkGameOver() {
+            if(lives <= 0) {
+                gameOver = true;
+                endGame();
+            }
+        }
+        
+        function endGame() {
+            gameOverScreen.classList.remove('hidden');
+            gameOverTitle.textContent = win ? '🎉 Victory! 🎉' : '💔 Game Over 💔';
+            gameOverMessage.textContent = win ? 'All Animals Saved! Great Job!' : 'Try to save more next time...';
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawClouds();
+            drawBasket(player.x, player.y);
+            animals.forEach(animal => {
+                ctx.save();
+                ctx.translate(animal.x + 10, animal.y + 10);
+                ctx.rotate(animal.rotation);
+                ctx.font = '20px Arial';
+                ctx.fillText(animal.type.emoji, -10, 10);
+                ctx.restore();
+            });
+            poachers.forEach(poacher => {
+                ctx.save();
+                ctx.translate(poacher.x + 15, poacher.y + 15);
+                ctx.rotate(poacher.rotation);
+                ctx.fillStyle = '#FF0000';
+                ctx.fillRect(-15, -15, 30, 30);
+                ctx.restore();
+            });
+            powerUps.forEach(powerUp => {
+                ctx.font = '20px Arial';
+                ctx.fillText(powerUp.type.emoji, powerUp.x, powerUp.y + 20);
+            });
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.life / 10, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            if(gameOver && gameStarted) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = win ? '#FFD700' : '#FF0000';
+                ctx.font = '30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(win ? 'You Win! All Animals Saved!' : 'Game Over! Animals Lost...', canvas.width / 2, canvas.height / 2);
+                ctx.font = '20px Arial';
+                ctx.fillText('Press P to pause/resume', canvas.width / 2, canvas.height / 2 + 40);
+                ctx.textAlign = 'left';
+            }
+        }
+
+        let cloudOffset = 0;
+        function drawClouds() {
+            cloudOffset += 0.5;
+            if(cloudOffset > 100) cloudOffset = 0;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            for(let i = 0; i < 3; i++) {
+                const x = (i * 150 + cloudOffset) % (canvas.width + 100) - 50;
+                const y = 50 + i * 30;
+                ctx.beginPath();
+                ctx.arc(x, y, 20, 0, Math.PI * 2);
+                ctx.arc(x + 25, y, 25, 0, Math.PI * 2);
+                ctx.arc(x + 50, y, 20, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        function drawBasket(x, y) {
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(x, y, player.width, player.height);
+            ctx.fillStyle = '#654321';
+            ctx.fillRect(x + 5, y - 10, 10, 10);
+            ctx.strokeStyle = '#A0522D';
+            ctx.lineWidth = 2;
+            for(let i = 0; i < player.width; i += 10) {
+                ctx.beginPath();
+                ctx.moveTo(x + i, y);
+                ctx.lineTo(x + i, y + player.height);
+                ctx.stroke();
+            }
+        }
+
+        function gameLoop() {
+            if(!gameOver && !paused) {
+                updatePlayer();
+                updateObjects();
+                updateParticles();
+            }
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        let animalInterval, poacherInterval, powerUpInterval;
+        function startSpawns() {
+            animalInterval = setInterval(() => {
+                if(!gameOver && gameStarted) createAnimal();
+            }, 1200);
+            poacherInterval = setInterval(() => {
+                if(!gameOver && gameStarted && Math.random() < 0.4) createPoacher();
+            }, 1800);
+            powerUpInterval = setInterval(() => {
+                if(!gameOver && gameStarted && Math.random() < 0.1) createPowerUp();
+            }, 5000);
+        }
+
+        function stopSpawns() {
+            clearInterval(animalInterval);
+            clearInterval(poacherInterval);
+            clearInterval(powerUpInterval);
+        }
+
+        function togglePause() {
+            if(!gameStarted) return;
+            paused = !paused;
+            document.getElementById('pauseBtn').textContent = paused ? 'Resume' : 'Pause';
+        }
+
+        function startGame() {
+            gameStarted = true;
+            startScreen.classList.add('hidden');
+            score = 0;
+            lives = 3;
+            animals = [];
+            poachers = [];
+            powerUps = [];
+            particles = [];
+            gameOver = false;
+            win = false;
+            paused = false;
+            document.getElementById('pauseBtn').textContent = 'Pause';
+            updateUI();
+            startSpawns();
+        }
+
+        function restartGame() {
+            gameOverScreen.classList.add('hidden');
+            stopSpawns();
+            startGame();
+        }
+
+        // Start the game loop
+        gameLoop();
+    </script>
+  </body>
+</html>
